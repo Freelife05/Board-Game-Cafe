@@ -1,0 +1,1228 @@
+openapi: 3.0.3
+
+info:
+  title: Board Game Cafe Management System API
+  description: |
+    RESTful API за управление на кафе-клуб за настолни игри.
+    Поддържа каталог с игри, управление на маси и система за резервации.
+
+    ## Автентикация
+    API използва **JWT Bearer Token** автентикация.
+    Получете токен чрез `POST /api/auth/login` и го включете в хедъра:
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    ## Роли
+    - **Admin** – пълен достъп до всички ресурси
+    - **Customer** – може да разглежда игри/маси и да управлява собствените си резервации
+
+    ## Обработка на грешки
+    Всички грешки се връщат в стандарта **RFC 7807 Problem Details**.
+  version: 1.0.0
+  contact:
+    name: Board Game Cafe API Support
+
+servers:
+  - url: http://localhost:5180
+    description: Локален сървър за разработка
+
+tags:
+  - name: Auth
+    description: Регистрация и вход
+  - name: BoardGames
+    description: Управление на каталога с настолни игри
+  - name: Tables
+    description: Управление на масите в кафето
+  - name: Reservations
+    description: Управление на резервациите
+
+# ─────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────
+paths:
+
+  # ── AUTH ──────────────────────────────────
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Регистрация на нов потребител
+      description: |
+        Създава нов Customer акаунт и връща JWT токен.
+        Потребителското име и имейлът трябва да са уникални.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDto'
+            example:
+              username: john_doe
+              email: john@example.com
+              password: Secret123!
+      responses:
+        '200':
+          description: Успешна регистрация – връща JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponseDto'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход в системата
+      description: |
+        Автентикира потребител с имейл и парола.
+        При успех връща JWT токен, валиден 8 часа.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+            example:
+              email: admin@boardgamecafe.com
+              password: Admin123!
+      responses:
+        '200':
+          description: Успешен вход – връща JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponseDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── BOARD GAMES ───────────────────────────
+  /api/boardgames:
+    get:
+      tags: [BoardGames]
+      summary: Списък с настолни игри
+      description: |
+        Връща страниран, сортиран и филтриран списък с всички настолни игри.
+        Достъпен без автентикация.
+
+        **Филтриране:** по заглавие (частично съвпадение) и жанр (частично съвпадение).
+        **Сортиране:** по `title`, `genre`, `priceperhour`, `difficultylevel`.
+        **Пагинация:** максимум 50 записа на страница.
+      operationId: getBoardGames
+      parameters:
+        - $ref: '#/components/parameters/titleFilter'
+        - $ref: '#/components/parameters/genreFilter'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/descending'
+      responses:
+        '200':
+          description: Страниран списък с игри
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedBoardGames'
+
+    post:
+      tags: [BoardGames]
+      summary: Добавяне на нова игра
+      description: |
+        Добавя нова настолна игра в каталога.
+        **Изисква роля Admin.**
+
+        **Валидации:**
+        - `title` – задължително, макс. 100 символа
+        - `genre` – задължително, макс. 50 символа
+        - `minPlayers` – задължително, между 1 и 20
+        - `maxPlayers` – задължително, между 1 и 20; трябва да е ≥ `minPlayers`
+        - `difficultyLevel` – задължително, макс. 20 символа
+        - `playTimeMinutes` – между 1 и 600
+        - `condition` – задължително, макс. 20 символа
+        - `pricePerHour` – между 0 и 100
+        - `imageUrl` – макс. 255 символа
+        - `description` – макс. 500 символа
+      operationId: createBoardGame
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoardGameDto'
+      responses:
+        '201':
+          description: Играта е създадена успешно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardGameDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/boardgames/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+
+    get:
+      tags: [BoardGames]
+      summary: Детайли за настолна игра
+      description: Връща пълна информация за конкретна игра по нейния ID.
+      operationId: getBoardGameById
+      responses:
+        '200':
+          description: Намерена игра
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardGameDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [BoardGames]
+      summary: Редактиране на игра
+      description: |
+        Обновява данните на съществуваща игра.
+        **Изисква роля Admin.**
+        Валидациите са идентични с тези при създаване, плюс задължително поле `isAvailable`.
+      operationId: updateBoardGame
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoardGameDto'
+      responses:
+        '200':
+          description: Играта е обновена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardGameDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [BoardGames]
+      summary: Изтриване на игра
+      description: |
+        Изтрива настолна игра от каталога.
+        **Изисква роля Admin.**
+      operationId: deleteBoardGame
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Играта е изтрита успешно
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── TABLES ────────────────────────────────
+  /api/tables:
+    get:
+      tags: [Tables]
+      summary: Списък с маси
+      description: |
+        Връща страниран, сортиран и филтриран списък с всички маси.
+        Достъпен без автентикация.
+
+        **Филтриране:** по статус (точно съвпадение) и зона (частично съвпадение).
+        **Сортиране:** по `tablenumber`, `capacity`, `hourlyrate`.
+      operationId: getTables
+      parameters:
+        - name: status
+          in: query
+          description: 'Филтър по статус (Available, Occupied, Reserved, Maintenance)'
+          required: false
+          schema:
+            type: string
+            enum: [Available, Occupied, Reserved, Maintenance]
+        - name: locationZone
+          in: query
+          description: Филтър по зона (частично съвпадение)
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/descending'
+      responses:
+        '200':
+          description: Страниран списък с маси
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedTables'
+
+    post:
+      tags: [Tables]
+      summary: Добавяне на нова маса
+      description: |
+        Добавя нова маса в кафето.
+        **Изисква роля Admin.**
+
+        **Валидации:**
+        - `tableNumber` – задължително, между 1 и 999; трябва да е уникален
+        - `capacity` – задължително, между 1 и 20
+        - `hourlyRate` – между 0 и 500
+        - `status` – задължително, макс. 20 символа
+        - `locationZone` – задължително, макс. 50 символа
+        - `description` – макс. 200 символа
+      operationId: createTable
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCafeTableDto'
+      responses:
+        '201':
+          description: Масата е създадена успешно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CafeTableDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/tables/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+
+    get:
+      tags: [Tables]
+      summary: Детайли за маса
+      description: Връща пълна информация за конкретна маса по нейния ID.
+      operationId: getTableById
+      responses:
+        '200':
+          description: Намерена маса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CafeTableDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Tables]
+      summary: Редактиране на маса
+      description: |
+        Обновява данните на съществуваща маса.
+        **Изисква роля Admin.**
+        Валидациите са идентични с тези при създаване.
+      operationId: updateTable
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCafeTableDto'
+      responses:
+        '200':
+          description: Масата е обновена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CafeTableDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [Tables]
+      summary: Изтриване на маса
+      description: |
+        Изтрива маса от системата.
+        **Изисква роля Admin.**
+      operationId: deleteTable
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Масата е изтрита успешно
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── RESERVATIONS ──────────────────────────
+  /api/reservations:
+    get:
+      tags: [Reservations]
+      summary: Всички резервации (Admin)
+      description: |
+        Връща страниран, сортиран и филтриран списък с всички резервации в системата.
+        **Изисква роля Admin.**
+
+        **Филтриране:** по статус (точно съвпадение) и дата (точно съвпадение по дата).
+        **Сортиране:** по `date`, `status`, `totalcost`.
+      operationId: getAllReservations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: 'Филтър по статус (Confirmed, Pending, Cancelled)'
+          required: false
+          schema:
+            type: string
+            enum: [Confirmed, Pending, Cancelled]
+        - name: date
+          in: query
+          description: Филтър по дата на резервацията (формат ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/descending'
+      responses:
+        '200':
+          description: Страниран списък с резервации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedReservations'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Reservations]
+      summary: Създаване на нова резервация
+      description: |
+        Създава резервация за автентикирания потребител.
+        **Изисква автентикация** (всеки потребител).
+
+        **Валидации:**
+        - `tableId` – задължително; масата трябва да съществува
+        - `boardGameId` – незадължително; ако е зададено, играта трябва да съществува и да е налична
+        - `reservationDate` – задължително; формат ISO 8601
+        - `startTime` – задължително; трябва да е преди `endTime`
+        - `endTime` – задължително; трябва да е след `startTime`
+        - `partySize` – задължително, между 1 и 20; не трябва да надвишава капацитета на масата
+        - `notes` – незадължително, макс. 500 символа
+
+        **Бизнес правила:**
+        - Системата проверява за конфликт с вече съществуващи резервации за същата маса, дата и времеви интервал
+        - `totalCost` се изчислява автоматично: `(endTime - startTime) × table.hourlyRate`
+        - Статусът се задава автоматично на `Confirmed`
+      operationId: createReservation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationDto'
+            example:
+              tableId: 1
+              boardGameId: 2
+              reservationDate: '2026-06-15T00:00:00Z'
+              startTime: '14:00:00'
+              endTime: '16:00:00'
+              partySize: 3
+              notes: Please prepare the Catan game in advance.
+      responses:
+        '201':
+          description: Резервацията е създадена успешно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/reservations/my:
+    get:
+      tags: [Reservations]
+      summary: Моите резервации
+      description: |
+        Връща страниран списък с резервациите на автентикирания потребител.
+        **Изисква автентикация.**
+
+        Резултатите са сортирани по дата на резервацията.
+      operationId: getMyReservations
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/descending'
+      responses:
+        '200':
+          description: Страниран списък с резервации на потребителя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedReservations'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/reservations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+
+    get:
+      tags: [Reservations]
+      summary: Детайли за резервация
+      description: |
+        Връща пълна информация за конкретна резервация.
+        **Изисква автентикация.**
+
+        **Правила за достъп:**
+        - Customer може да вижда само собствените си резервации
+        - Admin може да вижда всяка резервация
+      operationId: getReservationById
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Намерена резервация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Reservations]
+      summary: Редактиране на резервация
+      description: |
+        Обновява съществуваща резервация.
+        **Изисква автентикация.**
+
+        **Правила за достъп:**
+        - Customer може да редактира само собствените си резервации
+        - Admin може да редактира всяка резервация (включително промяна на статус)
+
+        **Валидации:** идентични с тези при създаване, плюс задължително поле `status`.
+
+        **Бизнес правила:**
+        - Проверява се за конфликт с резервации на другите потребители
+        - `totalCost` се преизчислява автоматично
+      operationId: updateReservation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReservationDto'
+      responses:
+        '200':
+          description: Резервацията е обновена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [Reservations]
+      summary: Изтриване на резервация
+      description: |
+        Изтрива резервация от системата.
+        **Изисква автентикация.**
+
+        **Правила за достъп:**
+        - Customer може да изтрива само собствените си резервации
+        - Admin може да изтрива всяка резервация
+      operationId: deleteReservation
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Резервацията е изтрита успешно
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ─────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────
+components:
+
+  # ── SECURITY ──────────────────────────────
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен, получен от /api/auth/login или /api/auth/register
+
+  # ── PARAMETERS ────────────────────────────
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      description: Уникален идентификатор на ресурса
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
+    page:
+      name: page
+      in: query
+      description: Номер на страницата (започва от 1)
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        default: 1
+
+    pageSize:
+      name: pageSize
+      in: query
+      description: Брой записа на страница (максимум 50)
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 50
+        default: 10
+
+    sortBy:
+      name: sortBy
+      in: query
+      description: Поле за сортиране
+      required: false
+      schema:
+        type: string
+
+    descending:
+      name: descending
+      in: query
+      description: Сортиране в низходящ ред
+      required: false
+      schema:
+        type: boolean
+        default: false
+
+    titleFilter:
+      name: title
+      in: query
+      description: Филтър по заглавие (частично съвпадение, нечувствително към регистъра)
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+
+    genreFilter:
+      name: genre
+      in: query
+      description: Филтър по жанр (частично съвпадение, нечувствително към регистъра)
+      required: false
+      schema:
+        type: string
+        maxLength: 50
+
+  # ── RESPONSES ─────────────────────────────
+  responses:
+    BadRequest:
+      description: Невалидни входни данни (RFC 7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://tools.ietf.org/html/rfc7807
+            title: Bad Request
+            status: 400
+            detail: MinPlayers cannot be greater than MaxPlayers.
+            instance: /api/boardgames
+
+    Unauthorized:
+      description: Липсващ или невалиден JWT токен (RFC 7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://tools.ietf.org/html/rfc7807
+            title: Unauthorized
+            status: 401
+            detail: Invalid email or password.
+            instance: /api/auth/login
+
+    Forbidden:
+      description: Недостатъчни права за достъп (RFC 7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://tools.ietf.org/html/rfc7807
+            title: Forbidden
+            status: 403
+            detail: Access denied.
+            instance: /api/boardgames
+
+    NotFound:
+      description: Ресурсът не е намерен (RFC 7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://tools.ietf.org/html/rfc7807
+            title: Resource Not Found
+            status: 404
+            detail: Board game with id 99 not found.
+            instance: /api/boardgames/99
+
+    Conflict:
+      description: Конфликт с вече съществуващи данни (RFC 7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://tools.ietf.org/html/rfc7807
+            title: Conflict
+            status: 409
+            detail: Table is already reserved for the selected time slot.
+            instance: /api/reservations
+
+  # ── SCHEMAS ───────────────────────────────
+  schemas:
+
+    # Error
+    ProblemDetails:
+      type: object
+      description: Стандартен формат за грешки по RFC 7807
+      properties:
+        type:
+          type: string
+          description: URI на типа грешка
+          example: https://tools.ietf.org/html/rfc7807
+        title:
+          type: string
+          description: Кратко описание на грешката
+          example: Resource Not Found
+        status:
+          type: integer
+          description: HTTP статус код
+          example: 404
+        detail:
+          type: string
+          description: Подробно описание на грешката
+          example: Board game with id 5 not found.
+        instance:
+          type: string
+          description: URI на заявката, при която е настъпила грешката
+          example: /api/boardgames/5
+
+    # Pagination wrapper
+    PagedMetadata:
+      type: object
+      properties:
+        totalCount:
+          type: integer
+          description: Общ брой записи
+          example: 42
+        page:
+          type: integer
+          description: Текуща страница
+          example: 1
+        pageSize:
+          type: integer
+          description: Брой записа на страница
+          example: 10
+        totalPages:
+          type: integer
+          description: Общ брой страници
+          example: 5
+        hasNextPage:
+          type: boolean
+          example: true
+        hasPreviousPage:
+          type: boolean
+          example: false
+
+    # ── AUTH schemas ──────────────────────
+    RegisterDto:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Уникално потребителско име
+          example: john_doe
+        email:
+          type: string
+          format: email
+          maxLength: 100
+          description: Уникален имейл адрес
+          example: john@example.com
+        password:
+          type: string
+          minLength: 8
+          description: Парола (минимум 8 символа)
+          example: Secret123!
+
+    LoginDto:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 100
+          example: admin@boardgamecafe.com
+        password:
+          type: string
+          example: Admin123!
+
+    AuthResponseDto:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Bearer токен
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        username:
+          type: string
+          example: admin
+        email:
+          type: string
+          format: email
+          example: admin@boardgamecafe.com
+        role:
+          type: string
+          enum: [Admin, Customer]
+          example: Admin
+        expiresAt:
+          type: string
+          format: date-time
+          description: Дата и час на изтичане на токена (UTC)
+          example: '2026-05-23T20:00:00Z'
+
+    # ── BOARD GAME schemas ────────────────
+    BoardGameDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          maxLength: 100
+          example: Catan
+        genre:
+          type: string
+          maxLength: 50
+          example: Strategy
+        minPlayers:
+          type: integer
+          example: 3
+        maxPlayers:
+          type: integer
+          example: 4
+        difficultyLevel:
+          type: string
+          maxLength: 20
+          example: Medium
+        playTimeMinutes:
+          type: integer
+          example: 90
+        condition:
+          type: string
+          maxLength: 20
+          example: Excellent
+        pricePerHour:
+          type: number
+          format: double
+          example: 3.50
+        isAvailable:
+          type: boolean
+          example: true
+        imageUrl:
+          type: string
+          maxLength: 255
+          nullable: true
+          example: https://example.com/catan.jpg
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: Trade, build and settle on the island of Catan.
+        addedAt:
+          type: string
+          format: date-time
+          example: '2026-05-23T10:00:00Z'
+
+    CreateBoardGameDto:
+      type: object
+      required: [title, genre, minPlayers, maxPlayers, difficultyLevel, condition]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Catan
+        genre:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Strategy
+        minPlayers:
+          type: integer
+          minimum: 1
+          maximum: 20
+          example: 3
+        maxPlayers:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Трябва да е >= minPlayers
+          example: 4
+        difficultyLevel:
+          type: string
+          minLength: 1
+          maxLength: 20
+          enum: [Easy, Medium, Hard, Expert]
+          example: Medium
+        playTimeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 600
+          example: 90
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 20
+          enum: [Excellent, Good, Fair, Poor]
+          example: Excellent
+        pricePerHour:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          example: 3.50
+        imageUrl:
+          type: string
+          maxLength: 255
+          nullable: true
+          example: https://example.com/catan.jpg
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: Trade, build and settle.
+
+    UpdateBoardGameDto:
+      allOf:
+        - $ref: '#/components/schemas/CreateBoardGameDto'
+        - type: object
+          required: [isAvailable]
+          properties:
+            isAvailable:
+              type: boolean
+              description: Дали играта е налична за резервация
+              example: true
+
+    PagedBoardGames:
+      allOf:
+        - $ref: '#/components/schemas/PagedMetadata'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/BoardGameDto'
+
+    # ── TABLE schemas ─────────────────────
+    CafeTableDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        tableNumber:
+          type: integer
+          example: 1
+        capacity:
+          type: integer
+          example: 4
+        isVIP:
+          type: boolean
+          example: false
+        hourlyRate:
+          type: number
+          format: double
+          example: 5.00
+        status:
+          type: string
+          maxLength: 20
+          example: Available
+        locationZone:
+          type: string
+          maxLength: 50
+          example: Main Hall
+        description:
+          type: string
+          maxLength: 200
+          nullable: true
+          example: Standard table near the window.
+
+    CreateCafeTableDto:
+      type: object
+      required: [tableNumber, capacity, status, locationZone]
+      properties:
+        tableNumber:
+          type: integer
+          minimum: 1
+          maximum: 999
+          description: Уникален номер на масата
+          example: 6
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Максимален брой хора на масата
+          example: 4
+        isVIP:
+          type: boolean
+          default: false
+          example: false
+        hourlyRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 500
+          example: 5.00
+        status:
+          type: string
+          minLength: 1
+          maxLength: 20
+          enum: [Available, Occupied, Reserved, Maintenance]
+          example: Available
+        locationZone:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Main Hall
+        description:
+          type: string
+          maxLength: 200
+          nullable: true
+          example: Corner table with extra space.
+
+    UpdateCafeTableDto:
+      $ref: '#/components/schemas/CreateCafeTableDto'
+
+    PagedTables:
+      allOf:
+        - $ref: '#/components/schemas/PagedMetadata'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CafeTableDto'
+
+    # ── RESERVATION schemas ───────────────
+    ReservationDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 2
+        userName:
+          type: string
+          example: john_doe
+        tableId:
+          type: integer
+          example: 1
+        tableNumber:
+          type: integer
+          example: 1
+        boardGameId:
+          type: integer
+          nullable: true
+          example: 2
+        boardGameTitle:
+          type: string
+          nullable: true
+          example: Catan
+        reservationDate:
+          type: string
+          format: date-time
+          example: '2026-06-15T00:00:00Z'
+        startTime:
+          type: string
+          description: Начален час (формат HH:MM:SS)
+          example: '14:00:00'
+        endTime:
+          type: string
+          description: Краен час (формат HH:MM:SS)
+          example: '16:00:00'
+        partySize:
+          type: integer
+          example: 3
+        totalCost:
+          type: number
+          format: double
+          description: Автоматично изчислена цена (часове × тарифа на масата)
+          example: 10.00
+        status:
+          type: string
+          maxLength: 20
+          enum: [Confirmed, Pending, Cancelled]
+          example: Confirmed
+        notes:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: Please prepare the Catan game in advance.
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-23T12:00:00Z'
+
+    CreateReservationDto:
+      type: object
+      required: [tableId, reservationDate, startTime, endTime, partySize]
+      properties:
+        tableId:
+          type: integer
+          description: ID на масата; трябва да съществува
+          example: 1
+        boardGameId:
+          type: integer
+          nullable: true
+          description: ID на желана настолна игра (незадължително); трябва да е налична
+          example: 2
+        reservationDate:
+          type: string
+          format: date-time
+          description: Дата на резервацията (ISO 8601)
+          example: '2026-06-15T00:00:00Z'
+        startTime:
+          type: string
+          description: Начален час (HH:MM:SS); трябва да е преди endTime
+          example: '14:00:00'
+        endTime:
+          type: string
+          description: Краен час (HH:MM:SS); трябва да е след startTime
+          example: '16:00:00'
+        partySize:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Брой хора; не трябва да надвишава капацитета на масата
+          example: 3
+        notes:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: Please prepare the Catan game in advance.
+
+    UpdateReservationDto:
+      allOf:
+        - $ref: '#/components/schemas/CreateReservationDto'
+        - type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              minLength: 1
+              maxLength: 20
+              enum: [Confirmed, Pending, Cancelled]
+              description: Нов статус на резервацията
+              example: Confirmed
+
+    PagedReservations:
+      allOf:
+        - $ref: '#/components/schemas/PagedMetadata'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReservationDto'
