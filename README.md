@@ -94,8 +94,8 @@ cd BoardGameCafe.API
 dotnet run
 ```
 
-API стартира на **http://localhost:5000**  
-Swagger UI: **http://localhost:5000/swagger**
+API стартира на **http://localhost:5180**  
+Swagger UI: **http://localhost:5180/swagger**
 
 > Базата данни и seed данните се създават автоматично при първото стартиране.
 
