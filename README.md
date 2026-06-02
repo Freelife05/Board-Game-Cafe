@@ -4,10 +4,9 @@
   **Тема:** Board Game Cafe Management System
   **Описание:** Система за управление на кафе-клуб за настолни игри. Включва каталог с игри, управление на маси и система за резервации.
 
-  Test user
-  |customer1|
-  |customer@gmail.com|
-  |customer123|
+   **Тестов Customer акаунт:**
+  - Email: `customer@boardgamecafe.com`
+  - Password: `Customer123!`
   ---
 
   ## Технологичен стек
