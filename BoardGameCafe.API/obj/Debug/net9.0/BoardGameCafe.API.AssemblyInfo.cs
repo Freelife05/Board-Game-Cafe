@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BoardGameCafe.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e48a9fe0b9b0d87f9be294082ae9855702a9ddd3")]
 [assembly: System.Reflection.AssemblyProductAttribute("BoardGameCafe.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BoardGameCafe.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

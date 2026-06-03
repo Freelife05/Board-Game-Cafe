@@ -33,4 +33,7 @@ public class CreateBoardGameDto
 
     [MaxLength(500)]
     public string? Description { get; set; }
+
+    [Required, MinLength(10), MaxLength(1000)]
+    public string FullDescription { get; set; } = string.Empty;
 }

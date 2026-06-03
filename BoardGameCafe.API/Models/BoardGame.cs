@@ -36,6 +36,9 @@ public class BoardGame
     [MaxLength(500)]
     public string? Description { get; set; }
 
+    [Required, MinLength(10), MaxLength(1000)]
+    public string FullDescription { get; set; } = string.Empty;
+
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();

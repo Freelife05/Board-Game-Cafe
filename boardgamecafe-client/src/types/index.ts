@@ -19,6 +19,7 @@ export interface BoardGame {
   isAvailable: boolean;
   imageUrl?: string;
   description?: string;
+  fullDescription: string;
   addedAt: string;
 }
 

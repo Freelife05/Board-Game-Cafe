@@ -18,9 +18,10 @@ export default function GamesPage() {
   const [editing, setEditing] = useState<BoardGame | null>(null);
   const [form, setForm] = useState(defaultForm());
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [detailGame, setDetailGame] = useState<BoardGame | null>(null);
 
   function defaultForm() {
-    return { title: '', genre: '', minPlayers: 2, maxPlayers: 4, difficultyLevel: 'Medium', playTimeMinutes: 60, condition: 'Good', pricePerHour: 3, isAvailable: true, imageUrl: '', description: '' };
+    return { title: '', genre: '', minPlayers: 2, maxPlayers: 4, difficultyLevel: 'Medium', playTimeMinutes: 60, condition: 'Good', pricePerHour: 3, isAvailable: true, imageUrl: '', description: '', fullDescription: '' };
   }
 
   const fetchGames = async () => {
@@ -35,7 +36,11 @@ export default function GamesPage() {
   const handleSearch = (e: React.FormEvent) => { e.preventDefault(); setPage(1); fetchGames(); };
 
   const openCreate = () => { setEditing(null); setForm(defaultForm()); setShowForm(true); };
-  const openEdit = (g: BoardGame) => { setEditing(g); setForm({ ...g, imageUrl: g.imageUrl || '', description: g.description || '' }); setShowForm(true); };
+  const openEdit = (g: BoardGame) => {
+    setEditing(g);
+    setForm({ ...g, imageUrl: g.imageUrl || '', description: g.description || '', fullDescription: g.fullDescription || '' });
+    setShowForm(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,12 +96,13 @@ export default function GamesPage() {
               {g.isAvailable ? 'Available' : 'Unavailable'}
             </span>
             {g.description && <p style={styles.desc}>{g.description}</p>}
-            {isAdmin && (
-              <div style={styles.actions}>
+            <div style={styles.actions}>
+              <button onClick={() => setDetailGame(g)} style={styles.detailsBtn}>Details</button>
+              {isAdmin && <>
                 <button onClick={() => openEdit(g)} style={styles.editBtn}>Edit</button>
                 <button onClick={() => setDeleteId(g.id)} style={styles.deleteBtn}>Delete</button>
-              </div>
-            )}
+              </>}
+            </div>
           </div>
         ))}
       </div>
@@ -113,31 +119,113 @@ export default function GamesPage() {
         />
       )}
 
+      {detailGame && (
+        <div style={styles.modal} onClick={() => setDetailGame(null)}>
+          <div style={styles.detailCard} onClick={e => e.stopPropagation()}>
+            {detailGame.imageUrl && <img src={detailGame.imageUrl} alt={detailGame.title} style={styles.detailImg} />}
+            <div style={styles.detailHeader}>
+              <h2 style={styles.detailTitle}>{detailGame.title}</h2>
+              <span style={{ ...styles.statusChip, ...(detailGame.isAvailable ? styles.statusAvail : styles.statusUnavail) }}>
+                {detailGame.isAvailable ? 'Available' : 'Unavailable'}
+              </span>
+            </div>
+            <p style={styles.detailMeta}>{detailGame.genre} · {detailGame.difficultyLevel} · {detailGame.condition} condition</p>
+            <div style={styles.detailStats}>
+              <div style={styles.statBox}>
+                <span style={styles.statLabel}>Players</span>
+                <span style={styles.statValue}>{detailGame.minPlayers}–{detailGame.maxPlayers}</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={styles.statLabel}>Play Time</span>
+                <span style={styles.statValue}>{detailGame.playTimeMinutes} min</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={styles.statLabel}>Price</span>
+                <span style={styles.statValue}>€{detailGame.pricePerHour}/hr</span>
+              </div>
+            </div>
+            {detailGame.description && (
+              <p style={styles.detailShortDesc}>{detailGame.description}</p>
+            )}
+            <div style={styles.detailDivider} />
+            <p style={styles.detailFullDesc}>{detailGame.fullDescription}</p>
+            <button onClick={() => setDetailGame(null)} style={styles.detailCloseBtn}>Close</button>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div style={styles.modal}>
           <form onSubmit={handleSubmit} style={styles.modalCard}>
             <h3 style={styles.modalTitle}>{editing ? 'Edit Game' : 'Add Game'}</h3>
-            <input placeholder="Title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required maxLength={100} style={styles.modalInput} />
-            <input placeholder="Genre *" value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} required maxLength={50} style={styles.modalInput} />
-            <div style={styles.row}>
-              <input placeholder="Min Players" type="number" value={form.minPlayers} onChange={e => setForm(f => ({ ...f, minPlayers: +e.target.value }))} required min={1} max={20} style={styles.modalInput} />
-              <input placeholder="Max Players" type="number" value={form.maxPlayers} onChange={e => setForm(f => ({ ...f, maxPlayers: +e.target.value }))} required min={1} max={20} style={styles.modalInput} />
+
+            <div style={styles.formGrid}>
+              <div style={{ ...styles.fieldGroup, gridColumn: 'span 2' }}>
+                <label style={styles.label}>Title *</label>
+                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required maxLength={100} style={styles.modalInput} />
+              </div>
+
+              <div style={{ ...styles.fieldGroup, gridColumn: 'span 2' }}>
+                <label style={styles.label}>Genre *</label>
+                <input value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} required maxLength={50} style={styles.modalInput} />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Min Players</label>
+                <input type="number" value={form.minPlayers} onChange={e => setForm(f => ({ ...f, minPlayers: +e.target.value }))} required min={1} max={20} style={styles.modalInput} />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Max Players</label>
+                <input type="number" value={form.maxPlayers} onChange={e => setForm(f => ({ ...f, maxPlayers: +e.target.value }))} required min={1} max={20} style={styles.modalInput} />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Difficulty</label>
+                <select value={form.difficultyLevel} onChange={e => setForm(f => ({ ...f, difficultyLevel: e.target.value }))} style={styles.modalInput}>
+                  <option>Easy</option><option>Medium</option><option>Hard</option><option>Expert</option>
+                </select>
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Condition</label>
+                <select value={form.condition} onChange={e => setForm(f => ({ ...f, condition: e.target.value }))} style={styles.modalInput}>
+                  <option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option>
+                </select>
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Play Time (min)</label>
+                <input type="number" value={form.playTimeMinutes} onChange={e => setForm(f => ({ ...f, playTimeMinutes: +e.target.value }))} min={1} max={600} style={styles.modalInput} />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Price per Hour (€)</label>
+                <input type="number" step="0.5" value={form.pricePerHour} onChange={e => setForm(f => ({ ...f, pricePerHour: +e.target.value }))} min={0} style={styles.modalInput} />
+              </div>
+
+              <div style={{ ...styles.fieldGroup, gridColumn: 'span 2' }}>
+                <label style={styles.label}>Image URL</label>
+                <input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} maxLength={255} style={styles.modalInput} />
+              </div>
+
+              <label style={{ ...styles.checkLabel, gridColumn: 'span 2' }}>
+                <input type="checkbox" checked={form.isAvailable} onChange={e => setForm(f => ({ ...f, isAvailable: e.target.checked }))} />
+                Available
+              </label>
+
+              <div style={{ ...styles.fieldGroup, gridColumn: 'span 2' }}>
+                <label style={styles.label}>Short Description</label>
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} maxLength={500} style={{ ...styles.modalInput, height: '80px' }} />
+              </div>
+
+              <div style={{ ...styles.fieldGroup, gridColumn: 'span 2' }}>
+                <label style={styles.label}>Full Description * (10–1000 characters)</label>
+                <textarea value={form.fullDescription} onChange={e => setForm(f => ({ ...f, fullDescription: e.target.value }))} required minLength={10} maxLength={1000} style={{ ...styles.modalInput, height: '130px' }} />
+              </div>
             </div>
-            <select value={form.difficultyLevel} onChange={e => setForm(f => ({ ...f, difficultyLevel: e.target.value }))} style={styles.modalInput}>
-              <option>Easy</option><option>Medium</option><option>Hard</option><option>Expert</option>
-            </select>
-            <input placeholder="Play Time (min)" type="number" value={form.playTimeMinutes} onChange={e => setForm(f => ({ ...f, playTimeMinutes: +e.target.value }))} min={1} max={600} style={styles.modalInput} />
-            <select value={form.condition} onChange={e => setForm(f => ({ ...f, condition: e.target.value }))} style={styles.modalInput}>
-              <option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option>
-            </select>
-            <input placeholder="Price per Hour (€)" type="number" step="0.5" value={form.pricePerHour} onChange={e => setForm(f => ({ ...f, pricePerHour: +e.target.value }))} min={0} style={styles.modalInput} />
-            <input placeholder="Image URL (optional)" value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} maxLength={255} style={styles.modalInput} />
-            <textarea placeholder="Description (optional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} maxLength={500} style={{ ...styles.modalInput, height: '80px' }} />
-            <label style={styles.checkLabel}>
-              <input type="checkbox" checked={form.isAvailable} onChange={e => setForm(f => ({ ...f, isAvailable: e.target.checked }))} />
-              Available
-            </label>
-            <div style={styles.row}>
+
+            <div style={{ ...styles.row, marginTop: '0.5rem' }}>
               <button type="submit" style={styles.saveBtn}>Save</button>
               <button type="button" onClick={() => setShowForm(false)} style={styles.cancelBtn}>Cancel</button>
             </div>
@@ -170,13 +258,30 @@ const styles: Record<string, React.CSSProperties> = {
   statusUnavail: { background: '#faeae3', color: '#7b2d1a' },
   desc: { margin: 0, fontSize: '0.8rem', color: '#a08470', lineHeight: 1.5 },
   actions: { display: 'flex', gap: '0.5rem', marginTop: '0.5rem' },
+  detailsBtn: { flex: 1, padding: '0.35rem', background: '#f5ece0', color: '#7a5c44', border: '1px solid #e2cdb9', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' },
   editBtn: { flex: 1, padding: '0.35rem', background: '#f0f7f3', color: '#2d5a3d', border: '1px solid #c5dece', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' },
   deleteBtn: { flex: 1, padding: '0.35rem', background: '#faeae3', color: '#7b2d1a', border: '1px solid #f0c4b0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' },
+  detailCard: { background: '#fffdf8', borderRadius: '16px', width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e2cdb9', boxShadow: '0 8px 32px rgba(44,29,18,0.18)', display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '2rem' },
+  detailImg: { width: '100%', height: '200px', objectFit: 'cover', borderRadius: '10px' },
+  detailHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' as const },
+  detailTitle: { margin: 0, fontSize: '1.4rem', color: '#2c1d12' },
+  detailMeta: { margin: 0, fontSize: '0.9rem', color: '#a08470' },
+  detailStats: { display: 'flex', gap: '0.75rem' },
+  statBox: { flex: 1, background: '#f5ece0', borderRadius: '8px', padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'center' },
+  statLabel: { fontSize: '0.72rem', color: '#a08470', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
+  statValue: { fontSize: '1rem', fontWeight: 700, color: '#2c1d12' },
+  detailShortDesc: { margin: 0, fontSize: '0.9rem', color: '#7a5c44', fontStyle: 'italic' },
+  detailDivider: { height: '1px', background: '#e2cdb9' },
+  detailFullDesc: { margin: 0, fontSize: '0.95rem', color: '#2c1d12', lineHeight: 1.7 },
+  detailCloseBtn: { marginTop: '0.25rem', padding: '0.65rem', background: '#f5ece0', color: '#7a5c44', border: '1.5px solid #e2cdb9', borderRadius: '7px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' },
   count: { textAlign: 'center', color: '#a08470', fontSize: '0.85rem', marginTop: '0.5rem' },
-  modal: { position: 'fixed', inset: 0, background: 'rgba(44,29,18,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' },
-  modalCard: { background: '#fffdf8', padding: '2rem', borderRadius: '14px', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e2cdb9', boxShadow: '0 8px 32px rgba(44,29,18,0.18)' },
-  modalTitle: { margin: '0 0 0.25rem', color: '#2c1d12' },
-  modalInput: { padding: '0.6rem 0.8rem', border: '1.5px solid #e2cdb9', borderRadius: '7px', fontSize: '0.95rem', background: '#fffdf8', color: '#2c1d12', resize: 'vertical' as const },
+  modal: { position: 'fixed', inset: 0, background: 'rgba(44,29,18,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1.5rem' },
+  modalCard: { background: '#fffdf8', padding: '2rem', borderRadius: '14px', width: '100%', maxWidth: '660px', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e2cdb9', boxShadow: '0 8px 32px rgba(44,29,18,0.18)' },
+  modalTitle: { margin: '0 0 0.25rem', color: '#2c1d12', fontSize: '1.2rem' },
+  formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' },
+  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '0.3rem' },
+  label: { fontSize: '0.8rem', fontWeight: 600, color: '#7a5c44' },
+  modalInput: { padding: '0.6rem 0.8rem', border: '1.5px solid #e2cdb9', borderRadius: '7px', fontSize: '0.95rem', background: '#fffdf8', color: '#2c1d12', resize: 'vertical' as const, width: '100%', boxSizing: 'border-box' as const },
   checkLabel: { display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#7a5c44', fontWeight: 600, fontSize: '0.9rem' },
   row: { display: 'flex', gap: '0.5rem' },
   saveBtn: { flex: 1, padding: '0.65rem', background: '#b85c38', color: '#fff', border: 'none', borderRadius: '7px', cursor: 'pointer', fontWeight: 700 },
