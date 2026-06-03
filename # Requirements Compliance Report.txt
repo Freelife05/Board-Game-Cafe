@@ -1,0 +1,254 @@
+# Requirements Compliance Report
+
+## Summary
+
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Database Structure | PASS |
+| 2 | CRUD Operations | PASS |
+| 3 | Security – Backend | PASS |
+| 4 | Security – Frontend | PASS |
+| 5 | Validation | PASS |
+| 6 | Filtering | PASS |
+| 7 | Pagination & Sorting | PASS |
+| 8 | Global Exception Handling | PASS |
+| 9 | Async / Await | PASS |
+
+---
+
+## 1. Database Structure
+
+**4 related tables, each with 6+ columns, multiple data types, required fields, and max-length constraints on all text columns.**
+
+### Tables
+
+| Table | Columns | Data Types |
+|---|---|---|
+| Users | Id, Username, Email, PasswordHash, Role, CreatedAt, IsActive | int, nvarchar, datetime2, bit |
+| BoardGames | Id, Title, Genre, MinPlayers, MaxPlayers, DifficultyLevel, PlayTimeMinutes, Condition, PricePerHour, IsAvailable, ImageUrl, Description, AddedAt | int, nvarchar, float, datetime2, bit |
+| CafeTables | Id, TableNumber, Capacity, IsVIP, HourlyRate, Status, LocationZone, Description | int, float, bit, nvarchar |
+| Reservations | Id, UserId, TableId, BoardGameId, ReservationDate, StartTime, EndTime, PartySize, TotalCost, Status, Notes, CreatedAt | int, datetime2, time, float, nvarchar |
+
+### Where to look
+
+- **Models**: `BoardGameCafe.API/Models/` — `User.cs`, `BoardGame.cs`, `CafeTable.cs`, `Reservation.cs`
+- **Migration (generated SQL)**: `BoardGameCafe.API/Migrations/InitialCreate.cs`
+- **Relationships**: `BoardGameCafe.API/Data/AppDbContext.cs`
+
+---
+
+## 2. CRUD Operations
+
+**Full Create / Read / Update / Delete is implemented on both backend and frontend for every model.**
+
+### Backend
+
+| Controller | File | Create | Read | Update | Delete |
+|---|---|---|---|---|---|
+| BoardGames | `Controllers/BoardGamesController.cs` | POST `/api/boardgames` | GET `/api/boardgames`, GET `/api/boardgames/{id}` | PUT `/api/boardgames/{id}` | DELETE `/api/boardgames/{id}` |
+| Tables | `Controllers/TablesController.cs` | POST `/api/tables` | GET `/api/tables`, GET `/api/tables/{id}` | PUT `/api/tables/{id}` | DELETE `/api/tables/{id}` |
+| Reservations | `Controllers/ReservationsController.cs` | POST `/api/reservations` | GET `/api/reservations`, GET `/api/reservations/my`, GET `/api/reservations/{id}` | PUT `/api/reservations/{id}` | DELETE `/api/reservations/{id}` |
+| Auth | `Controllers/AuthController.cs` | POST `/api/auth/register` | POST `/api/auth/login` | — | — |
+
+The actual business logic lives in the corresponding service classes under `Services/`.
+
+### Frontend
+
+| Page | File | CRUD actions |
+|---|---|---|
+| Games | `boardgamecafe-client/src/pages/GamesPage.tsx` | Create & Edit via modal form, Delete via button, list with pagination |
+| Tables | `boardgamecafe-client/src/pages/TablesPage.tsx` | Create & Edit via modal form, Delete via button, list with pagination |
+| Reservations | `boardgamecafe-client/src/pages/ReservationsPage.tsx` | Update status inline, Delete, list with pagination |
+| New Reservation | `boardgamecafe-client/src/pages/NewReservationPage.tsx` | Create form |
+| Login / Register | `boardgamecafe-client/src/pages/LoginPage.tsx`, `RegisterPage.tsx` | Auth create / read |
+
+---
+
+## 3. Security – Backend
+
+**JWT Bearer token authentication with role-based authorization.**
+
+### How it works
+
+1. A client sends credentials to `POST /api/auth/login`.
+2. `AuthService.LoginAsync` verifies the BCrypt-hashed password and returns a signed JWT.
+3. The token contains claims: `NameIdentifier` (user id), `Name`, `Email`, `Role`, expiry 8 hours.
+4. Every subsequent request must include `Authorization: Bearer <token>`.
+5. ASP.NET Core validates the token automatically before the controller runs.
+
+### Where it is configured
+
+- **JWT setup**: `BoardGameCafe.API/Program.cs` lines 23–37
+- **Token generation**: `BoardGameCafe.API/Services/AuthService.cs` — `GenerateToken` method
+- **Password hashing**: `AuthService.cs` — `RegisterAsync` uses `BCrypt.HashPassword`, `LoginAsync` uses `BCrypt.Verify`
+- **Authorize attributes**:
+  - `[Authorize]` on the controller class protects the whole controller.
+  - `[AllowAnonymous]` on GET endpoints allows public browsing.
+  - `[Authorize(Roles = "Admin")]` on Create / Update / Delete restricts mutations to admins.
+
+---
+
+## 4. Security – Frontend
+
+**Protected routes redirect unauthenticated users; every API request automatically carries the JWT.**
+
+### How it works
+
+1. On login the token and user object are stored in `localStorage`.
+2. An Axios request interceptor attaches `Authorization: Bearer <token>` to every outgoing call.
+3. A response interceptor listens for `401 Unauthorized`; when it fires it clears auth state and redirects to `/login`.
+4. `ProtectedRoute` wraps sensitive pages — if no user is found in context, it redirects to `/login` before rendering.
+5. Admin-only UI (create/edit/delete buttons) is conditionally rendered based on the `isAdmin` flag from `AuthContext`.
+
+### Where it is implemented
+
+| Concern | File |
+|---|---|
+| Token storage & logout | `boardgamecafe-client/src/contexts/AuthContext.tsx` |
+| Request / response interceptors | `boardgamecafe-client/src/services/api.ts` |
+| Protected route wrapper | `boardgamecafe-client/src/App.tsx` — `ProtectedRoute` component |
+| Admin UI gating | `GamesPage.tsx`, `TablesPage.tsx`, `ReservationsPage.tsx` |
+
+---
+
+## 5. Validation
+
+**Every database constraint is mirrored in the API DTOs (DataAnnotations) and in the frontend HTML attributes.**
+
+### Example — BoardGame
+
+| Field | DB constraint | DTO annotation | Frontend attribute |
+|---|---|---|---|
+| Title | `nvarchar(100) NOT NULL` | `[Required][MaxLength(100)]` | `maxLength={100}` |
+| PricePerHour | `float NOT NULL` | `[Required][Range(0, 100)]` | `min=0 max=100` |
+| MinPlayers | `int NOT NULL` | `[Required][Range(1, 20)]` | `min=1 max=20` |
+
+The same pattern is applied to all models.
+
+### Where to look
+
+| Layer | Files |
+|---|---|
+| Database constraints | `Models/User.cs`, `Models/BoardGame.cs`, `Models/CafeTable.cs`, `Models/Reservation.cs` |
+| API DTO validation | `DTOs/Auth/RegisterDto.cs`, `DTOs/BoardGame/CreateBoardGameDto.cs`, `DTOs/Table/CreateCafeTableDto.cs`, `DTOs/Reservation/CreateReservationDto.cs` |
+| Frontend validation | `GamesPage.tsx` (form inputs), `TablesPage.tsx`, `ReservationsPage.tsx`, `RegisterPage.tsx` |
+
+---
+
+## 6. Filtering
+
+**Every list endpoint accepts query parameters for search by at least two criteria.**
+
+| Service | Filter 1 | Filter 2 | Endpoint |
+|---|---|---|---|
+| BoardGames | `title` (contains, case-insensitive) | `genre` (contains, case-insensitive) | `GET /api/boardgames?title=&genre=` |
+| Tables | `status` (exact match) | `locationZone` (contains, case-insensitive) | `GET /api/tables?status=&locationZone=` |
+| Reservations | `status` (exact match) | `date` (exact date match) | `GET /api/reservations?status=&date=` |
+
+### Where it is implemented
+
+- **Backend services**: `Services/BoardGameService.cs`, `Services/TableService.cs`, `Services/ReservationService.cs` — the `GetAllAsync` method builds a LINQ query and conditionally appends `.Where(...)` clauses for each non-null parameter.
+- **Frontend search controls**: `GamesPage.tsx` lines 13–15 and 28, `TablesPage.tsx` lines 22–23 and 37, `ReservationsPage.tsx` lines 25–26 and 41.
+
+---
+
+## 7. Pagination & Sorting
+
+**Every list-returning service accepts `page`, `pageSize`, `sortBy`, and `descending` parameters and returns a `PagedResult<T>` wrapper.**
+
+### PagedResult shape
+
+```json
+{
+  "items": [...],
+  "totalCount": 42,
+  "page": 1,
+  "pageSize": 10,
+  "totalPages": 5,
+  "hasNextPage": true,
+  "hasPreviousPage": false
+}
+```
+
+### Sorting fields
+
+| Model | Supported sortBy values |
+|---|---|
+| BoardGame | `title`, `genre`, `priceperhour`, `difficultylevel` |
+| CafeTable | `tablenumber`, `capacity`, `hourlyrate` |
+| Reservation | `date`, `status`, `totalcost` |
+
+### Where it is implemented
+
+| Concern | File |
+|---|---|
+| Parameter model | `BoardGameCafe.API/Helpers/PaginationParams.cs` |
+| Result wrapper | `BoardGameCafe.API/Helpers/PagedResult.cs` |
+| Skip / Take + OrderBy | `Services/BoardGameService.cs`, `Services/TableService.cs`, `Services/ReservationService.cs` — inside `GetAllAsync` |
+| Frontend page controls | `boardgamecafe-client/src/components/Pagination.tsx` |
+| Passing params | `GamesPage.tsx`, `TablesPage.tsx`, `ReservationsPage.tsx` — `fetchXxx` functions |
+
+---
+
+## 8. Global Exception Handling
+
+**A middleware catches all unhandled exceptions and returns RFC 7807 Problem Details — no stack traces reach the client.**
+
+### Response format (RFC 7807)
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Board game with id 99 was not found.",
+  "instance": "/api/boardgames/99"
+}
+```
+
+### Exception-to-status mapping
+
+| Exception type | HTTP status |
+|---|---|
+| `KeyNotFoundException` | 404 Not Found |
+| `UnauthorizedAccessException` | 401 Unauthorized |
+| `InvalidOperationException` | 409 Conflict |
+| `ArgumentException` | 400 Bad Request |
+| Any other | 500 Internal Server Error |
+
+### Where it is implemented
+
+- **Middleware class**: `BoardGameCafe.API/Middleware/GlobalExceptionHandlingMiddleware.cs`
+- **Registered in pipeline**: `BoardGameCafe.API/Program.cs` line 78 — `app.UseMiddleware<GlobalExceptionHandlingMiddleware>()` (placed before all other middleware so it wraps every request)
+- **Logging**: The full exception (including stack trace) is written to the server log via `ILogger`; only the `Message` is sent to the client.
+
+---
+
+## 9. Async / Await
+
+**All database queries, file I/O, and external communications use `async` / `await` throughout the stack.**
+
+### Backend
+
+Every service method is declared `async Task<T>` and awaits EF Core async operations:
+
+| Operation | EF Core async method used |
+|---|---|
+| Check existence | `AnyAsync` |
+| Fetch single record | `FindAsync`, `FirstOrDefaultAsync` |
+| Fetch list | `ToListAsync` |
+| Count for pagination | `CountAsync` |
+| Persist changes | `SaveChangesAsync` |
+
+All controller action methods are `async Task<IActionResult>` and `await` the service calls.
+
+On startup, `Program.cs` awaits both `context.Database.MigrateAsync()` and `DbSeeder.SeedAsync(context)`.
+
+### Frontend
+
+All API calls use `async` arrow functions with `await api.get(...)` / `await api.post(...)` etc., wrapped in `try/catch` blocks. Examples:
+
+- `GamesPage.tsx` — `fetchGames`, `handleSubmit`, `handleDelete`
+- `TablesPage.tsx` — `fetchTables`, `handleSubmit`, `handleDelete`
+- `ReservationsPage.tsx` — `fetchReservations`, `handleUpdate`, `handleDelete`
+- `AuthContext.tsx` — `login`, `register`
